@@ -43,7 +43,6 @@ namespace PracticeMode
 
             LevelEditorApi.EnteredTestMode += () => { SetGameState(GameState.TestMode); };
             LevelEditorApi.EnteredLevelEditor += () => { SetGameState(GameState.Editor); };
-            LevelEditorApi.ExitedLevelEditor += () => { SetGameState(GameState.Other); };
 
             toggleModelKey = Config.Bind("Controls", "Toggle Model", KeyCode.Keypad8, "");
             backwardKey = Config.Bind("Controls", "Rewind", KeyCode.Keypad4, "");
@@ -55,10 +54,15 @@ namespace PracticeMode
             soapboxStateIndicator.SetActive(false);
         }
 
-        private void SetGameState(GameState gameState)
+        public void SetGameState(GameState gameState)
         {
             this.gameState = gameState;
-            Debug.Log(gameState);
+            Debug.LogWarning(gameState);
+
+            if(gameState == GameState.TestMode)
+            {
+                soapboxStateIndicator.SetActive(false);
+            }
         }
 
         public SoapboxState GetCurrentState()
@@ -87,32 +91,26 @@ namespace PracticeMode
             return null;
         }
 
-        public SoapboxState GetState(int index)
-        {
-            if(index < 0 || index >= recording.Count)
-            {
-                return null;
-            }
-
-            if (recording[index] != null)
-            {
-                return recording[index];
-            }
-
-            return null;
-        }
-
         public void ManageRecordingFrame()
         {
-            if(selectedRecordingFrame == -1)
+            //currentRecordingIndex contains the index of the last frame stored.
+            if (currentRecordingIndex == -1)
             {
+                //No recording present.
                 return;
             }
 
-            if(currentRecordingIndex == -1)
+            //There is a recording, but there is no frame selected. If possible set it to the first frame.
+            if (selectedRecordingFrame == -1)
             {
-                return;
-            }
+                if(recording.Count > 0)
+                {
+                    selectedRecordingFrame = 0;
+                }               
+            }          
+
+            Debug.LogWarning("Current recording count:" + recording.Count);
+            Debug.LogWarning("Current recording index:" + currentRecordingIndex);
 
             //Remove everything after the selected index.
             recording = recording.Take(selectedRecordingFrame + 1).ToList();
@@ -123,8 +121,18 @@ namespace PracticeMode
             switch(gameState)
             {
                 case GameState.TestMode:
-                    if(record)
+                    if (record)
                     {
+                        int frame;
+                        if (currentRecordingIndex == -1)
+                        {
+                            frame = 0;
+                        }
+                        else
+                        {
+                            frame = currentRecordingIndex + 1;
+                        }
+
                         SetupCar sc = PlayerManager.Instance.currentMaster.carSetups[0];
                         if(sc.reseter.finished)
                         {
@@ -138,10 +146,11 @@ namespace PracticeMode
                             rotation = sc.transform.rotation,
                             velocity = sc.cc.GetRB().velocity,
                             angularVelocity = sc.cc.GetRB().velocity,
-                            time = PlayerManager.Instance.currentMaster.currentLevelPhysicsTime
+                            time = PlayerManager.Instance.currentMaster.currentLevelPhysicsTime,
+                            frameID = frame
                         };
 
-                        currentRecordingIndex++;
+                        currentRecordingIndex = frame;
                         recording.Add(soapboxState);
                         soapboxState.Log();
                     }
@@ -200,6 +209,7 @@ namespace PracticeMode
             SoapboxState indexState = GetCurrentState();
 
             if(indexState == null) { return; }
+
             int selectedFrame = -1;
 
             if (forward)
@@ -292,6 +302,7 @@ namespace PracticeMode
             SoapboxState selectedState = GetCurrentState();
             if(selectedState != null)
             {
+                currentRecordingIndex = selectedFrame;
                 soapboxStateIndicator.transform.position = indexState.position;
                 soapboxStateIndicator.transform.rotation = indexState.rotation;
                 PlayerManager.Instance.messenger.Log("State time: " + indexState.time, 1f);
@@ -338,6 +349,7 @@ namespace PracticeMode
         public Vector3 velocity;
         public Vector3 angularVelocity;
         public float time;
+        public int frameID;
 
         public void Log()
         {
@@ -347,6 +359,7 @@ namespace PracticeMode
             Debug.Log(velocity);
             Debug.Log(angularVelocity);
             Debug.Log(time);
+            Debug.Log(frameID);
         }
     }
 
@@ -368,7 +381,7 @@ namespace PracticeMode
                 Plugin.Instance.ManageRecordingFrame();
                 return false;
             }
-
+           
             return true;
         }
     }
@@ -391,6 +404,16 @@ namespace PracticeMode
             }
 
             Plugin.Instance.EnableRecording();
+        }
+    }
+
+
+    [HarmonyPatch(typeof(MainMenuUI), "Awake")]
+    public static class MainMenuUIAwake
+    {
+        public static void Postfix()
+        {
+            Plugin.Instance.SetGameState(Plugin.GameState.Other);
         }
     }
 }
