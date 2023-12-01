@@ -8,6 +8,123 @@ using System.Linq;
 
 namespace PracticeMode
 {
+    public class SoapboxRecorderFrame
+    {
+        public Vector3 position;
+        public Quaternion rotation;
+        public Vector3 velocity;
+        public Vector3 angularVelocity;
+        public float time;
+    }
+
+    public class SoapboxRecorder
+    {
+        public List<SoapboxRecorderFrame> frames;
+        public int currentFrameIndex = 0;
+
+        public SoapboxRecorder()
+        {
+            frames = new List<SoapboxRecorderFrame>();
+        }
+
+        public void AddFrame(SoapboxRecorderFrame frame)
+        {
+            frames.Add(frame);
+        }
+
+        public void Clear()
+        {
+            frames.Clear();
+        }
+
+        public void AdvanceFrame()
+        {
+            if (currentFrameIndex < frames.Count - 1)
+            {
+                currentFrameIndex++;
+            }
+        }
+
+        public void AdvanceSecond()
+        {
+            float currentTime = frames[currentFrameIndex].time;
+            while (currentFrameIndex < frames.Count - 1 && frames[currentFrameIndex + 1].time <= currentTime + 1.0f)
+            {
+                currentFrameIndex++;
+            }
+        }
+
+        public void AdvanceMinute()
+        {
+            float currentTime = frames[currentFrameIndex].time;
+            while (currentFrameIndex < frames.Count - 1 && frames[currentFrameIndex + 1].time <= currentTime + 60.0f)
+            {
+                currentFrameIndex++;
+            }
+        }
+
+        public void RewindFrame()
+        {
+            if (currentFrameIndex > 0)
+            {
+                currentFrameIndex--;
+            }
+        }
+
+        public void RewindSecond()
+        {
+            float currentTime = frames[currentFrameIndex].time;
+            while (currentFrameIndex > 0 && frames[currentFrameIndex - 1].time >= currentTime - 1.0f)
+            {
+                currentFrameIndex--;
+            }
+        }
+
+        public void RewindMinute()
+        {
+            float currentTime = frames[currentFrameIndex].time;
+            while (currentFrameIndex > 0 && frames[currentFrameIndex - 1].time >= currentTime - 60.0f)
+            {
+                currentFrameIndex--;
+            }
+        }
+
+        public void AdvanceToEnd()
+        {
+            currentFrameIndex = frames.Count - 1;
+        }
+
+        public void RewindToStart()
+        {
+            currentFrameIndex = 0;
+        }
+
+        public SoapboxRecorderFrame GetCurrentFrame()
+        {
+            if (currentFrameIndex >= 0 && currentFrameIndex < frames.Count)
+            {
+                return frames[currentFrameIndex];
+            }
+            else
+            {
+                // Handle the case where the currentFrameIndex is out of bounds.
+                return null; // Or throw an exception, return a default frame, etc., depending on your needs.
+            }
+        }
+
+        public void RemoveFramesAfterCurrent()
+        {
+            if (currentFrameIndex >= 0 && currentFrameIndex < frames.Count)
+            {
+                frames.RemoveRange(currentFrameIndex + 1, frames.Count - currentFrameIndex - 1);
+            }
+        }
+    }
+
+
+
+
+
     [BepInPlugin(pluginGUID, pluginName, pluginVersion)]
     public class Plugin : BaseUnityPlugin
     {
