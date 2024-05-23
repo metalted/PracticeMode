@@ -5,181 +5,40 @@ using ZeepSDK.LevelEditor;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using System.Linq;
+using ZeepSDK.Racing;
 
 namespace PracticeMode
 {
-    public class SoapboxRecorderFrame
-    {
-        public Vector3 position;
-        public Quaternion rotation;
-        public Vector3 velocity;
-        public Vector3 angularVelocity;
-        public float time;
-    }
-
-    public class SoapboxRecorder
-    {
-        public List<SoapboxRecorderFrame> frames;
-        public int currentFrameIndex = 0;
-
-        public SoapboxRecorder()
-        {
-            frames = new List<SoapboxRecorderFrame>();
-        }
-
-        public void AddFrame(SoapboxRecorderFrame frame)
-        {
-            frames.Add(frame);
-        }
-
-        public void Clear()
-        {
-            frames.Clear();
-            currentFrameIndex = 0;
-        }
-
-        public void AdvanceFrame()
-        {
-            if (currentFrameIndex < frames.Count - 1)
-            {
-                currentFrameIndex++;
-            }
-        }
-
-        public void AdvanceSecond()
-        {
-            try
-            {
-                float currentTime = frames[currentFrameIndex].time;
-                while (currentFrameIndex < frames.Count - 1 && frames[currentFrameIndex + 1].time <= currentTime + 1.0f)
-                {
-                    currentFrameIndex++;
-                }
-            }
-            catch { }
-        }
-
-        public void AdvanceMinute()
-        {
-            try { 
-                float currentTime = frames[currentFrameIndex].time;
-                while (currentFrameIndex < frames.Count - 1 && frames[currentFrameIndex + 1].time <= currentTime + 60.0f)
-                {
-                    currentFrameIndex++;
-                }
-            }
-            catch { }
-        }
-
-        public void RewindFrame()
-        {
-            if (currentFrameIndex > 0)
-            {
-                currentFrameIndex--;
-            }
-        }
-
-        public void RewindSecond()
-        {
-            try
-            {
-                float currentTime = frames[currentFrameIndex].time;
-                while (currentFrameIndex > 0 && frames[currentFrameIndex - 1].time >= currentTime - 1.0f)
-                {
-                    currentFrameIndex--;
-                }
-            }
-            catch { }
-        }
-
-        public void RewindMinute()
-        {
-            try
-            {
-                float currentTime = frames[currentFrameIndex].time;
-                while (currentFrameIndex > 0 && frames[currentFrameIndex - 1].time >= currentTime - 60.0f)
-                {
-                    currentFrameIndex--;
-                }
-            }
-            catch { }
-        }
-
-        public void AdvanceToEnd()
-        {
-            currentFrameIndex = frames.Count - 1;
-        }
-
-        public void RewindToStart()
-        {
-            currentFrameIndex = 0;
-        }
-
-        public SoapboxRecorderFrame GetCurrentFrame()
-        {
-            if (currentFrameIndex >= 0 && currentFrameIndex < frames.Count)
-            {
-                return frames[currentFrameIndex];
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        public void RemoveFramesAfterCurrent()
-        {
-            if (currentFrameIndex >= 0 && currentFrameIndex < frames.Count)
-            {
-                frames.RemoveRange(currentFrameIndex + 1, frames.Count - currentFrameIndex - 1);
-            }
-        }
-
-        public SoapboxRecorderFrame GetLastFrame()
-        {
-            if (frames.Count > 0)
-            {
-                return frames[frames.Count - 1];
-            }
-            else
-            {
-                return null;
-            }
-        }
-    }
-
     [BepInPlugin(pluginGUID, pluginName, pluginVersion)]
     public class Plugin : BaseUnityPlugin
     {
         public const string pluginGUID = "com.metalted.zeepkist.practicemode";
         public const string pluginName = "Practice Mode";
-        public const string pluginVersion = "1.0";
-        
+        public const string pluginVersion = "1.2";
+
         public static Plugin Instance;
         public SoapboxRecorder recorder = new SoapboxRecorder();
+
+        //Should we record right now?
         public bool record = false;
 
-        //Settings
-        public ConfigEntry<KeyCode> toggleModelKey;
-        public ConfigEntry<KeyCode> backwardKey;
-        public ConfigEntry<KeyCode> forwardKey;
-        public ConfigEntry<KeyCode> timeScaleCycleKey;
-        public ConfigEntry<KeyCode> clearKey;
+        //The soapbox in the level editor for position visualization.
+        public GameObject soapboxVisualizer = null;
 
-        //Gameobject to show the soapbox in the level editor.
-        public GameObject soapboxStateIndicator = null;
+        // Selected frame for test mode
+        public SoapboxRecorderFrame selectedFrame = null;
+
+        //Timeline selection slider.
+        private float previousSliderValue = 0.0f;
+        private float sliderValue = 0.0f;
+        private float minTime = 0.0f;
+        private float maxTime = 0.0f;
+        private bool checkpointFlag = false;
 
         //Where in the game we are.
-        public enum GameState { Other, Editor, TestMode};
+        public enum GameState { Other, Editor, TestMode };
         public GameState gameState = GameState.Other;
 
-        //The select time scale for moving the timeline.
-        public enum TimeScale { Frame, Second, Minute};
-        public TimeScale timeScale = TimeScale.Frame;
-
-        //The starter frame
-        public SoapboxRecorderFrame selectedFrame = null;
-        
         private void Awake()
         {
             Harmony harmony = new Harmony(pluginGUID);
@@ -192,13 +51,9 @@ namespace PracticeMode
 
             LevelEditorApi.EnteredTestMode += () => { SetGameState(GameState.TestMode); };
             LevelEditorApi.EnteredLevelEditor += () => { SetGameState(GameState.Editor); };
-            LevelEditorApi.LevelLoaded += () => { recorder.Clear(); soapboxStateIndicator.SetActive(false); };
+            LevelEditorApi.LevelLoaded += () => { recorder.Clear(); soapboxVisualizer.SetActive(false); };
 
-            toggleModelKey = Config.Bind("Controls", "Toggle Model", KeyCode.Keypad8, "");
-            backwardKey = Config.Bind("Controls", "Rewind", KeyCode.Keypad4, "");
-            forwardKey = Config.Bind("Controls", "Fast Forward", KeyCode.Keypad6, "");
-            timeScaleCycleKey = Config.Bind("Controls", "Time Cycle", KeyCode.Keypad5, "");
-            clearKey = Config.Bind("Controls", "Clear Recording", KeyCode.Keypad2, "");
+            RacingApi.PassedCheckpoint += (time) => { if (record) { checkpointFlag = true; } else { checkpointFlag = false; } };
         }
 
         public void SetGameState(GameState gameState)
@@ -207,182 +62,147 @@ namespace PracticeMode
 
             switch (gameState)
             {
-                case GameState.Editor:                   
+                case GameState.Editor:
+
+                    //No need for recording in the editor.
+                    record = false;
+
+                    if (recorder.frames.Count > 0)
+                    {
+                        //Update the slider range.
+                        minTime = recorder.GetFirstFrame().time;
+                        maxTime = recorder.GetLastFrame().time;
+
+                        //Set to min if out of range.
+                        if (sliderValue < minTime || sliderValue > maxTime)
+                        {
+                            sliderValue = minTime;
+                        }
+
+                        //Show the visualizer.
+                        Plugin.Instance.soapboxVisualizer.SetActive(true);
+
+                        //Get the frame based on the slider value.
+                        int frameIndex = recorder.GetFrameIndexByTime(sliderValue);
+                        if (frameIndex != -1)
+                        {
+                            recorder.SetCurrentFrameIndex(frameIndex);
+                            SoapboxRecorderFrame frame = recorder.GetCurrentFrame();
+                            if (frame != null)
+                            {
+                                SetIndicator(frame);
+                            }
+                        }
+                    }
                     break;
+
                 case GameState.TestMode:
-                    //Always make sure the model is hidden when going into test mode.
-                    soapboxStateIndicator.SetActive(false);
+                    soapboxVisualizer.SetActive(false);
                     break;
                 case GameState.Other:
-                    //Always make sure the model is hidden when leaving the level editor.
-                    if (soapboxStateIndicator != null)
+                    if (soapboxVisualizer != null)
                     {
-                        soapboxStateIndicator.SetActive(false);
+                        soapboxVisualizer.SetActive(false);
                     }
                     break;
             }
-        }     
+        }
 
         private void Update()
         {
-            switch(gameState)
+            if (gameState == GameState.TestMode)
             {
-                case GameState.TestMode:
-                    TestModeUpdate();
-                    break;
-                case GameState.Editor:
-                    record = false;
-                    EditorUpdate();
-                    break;
-            }
-        }
-
-        private void EditorUpdate()
-        {
-            //Timescale selection input.
-            if (Input.GetKeyDown((KeyCode)timeScaleCycleKey.BoxedValue))
-            {
-                switch (timeScale)
+                if (record)
                 {
-                    case TimeScale.Frame:
-                        timeScale = TimeScale.Second;
-                        break;
-                    case TimeScale.Second:
-                        timeScale = TimeScale.Minute;
-                        break;
-                    case TimeScale.Minute:
-                        timeScale = TimeScale.Frame;
-                        break;
-                }
-
-                PlayerManager.Instance.messenger.Log("Time Scale: " + timeScale.ToString(), 1f);
-            }
-
-            //Hide/show model
-            if (Input.GetKeyDown((KeyCode)toggleModelKey.BoxedValue))
-            {
-                SoapboxRecorderFrame frame = recorder.GetCurrentFrame();
-
-                //No frame available.
-                if(frame == null)
-                {
-                    soapboxStateIndicator.SetActive(false);
-                }
-                else
-                {
-                    bool show = !soapboxStateIndicator.activeSelf;
-                    soapboxStateIndicator.SetActive(!soapboxStateIndicator.activeSelf);
-
-                    if(show)
+                    SetupCar sc = PlayerManager.Instance.currentMaster.carSetups[0];
+                    if (sc.reseter.finished)
                     {
-                        SetIndicator(frame);
-                    }                    
-                }
-            }
-
-            //Move timeline backward.
-            if (Input.GetKeyDown((KeyCode)backwardKey.BoxedValue))
-            {
-                switch (timeScale)
-                {
-                    case TimeScale.Frame:
-                        recorder.RewindFrame();
-                        break;
-                    case TimeScale.Second:
-                        recorder.RewindSecond();
-                        break;
-                    case TimeScale.Minute:
-                        recorder.RewindMinute();
-                        break;
-                }
-
-                SoapboxRecorderFrame frame = recorder.GetCurrentFrame();
-                if (frame == null)
-                {
-                    soapboxStateIndicator.SetActive(false);
-                }
-                else
-                {
-                    SetIndicator(frame);
-                }
-            }
-
-            //Move timeline forward.
-            if (Input.GetKeyDown((KeyCode)forwardKey.BoxedValue))
-            {
-                switch (timeScale)
-                {
-                    case TimeScale.Frame:
-                        recorder.AdvanceFrame();
-                        break;
-                    case TimeScale.Second:
-                        recorder.AdvanceSecond();
-                        break;
-                    case TimeScale.Minute:
-                        recorder.AdvanceMinute();
-                        break;
-                }
-
-                SoapboxRecorderFrame frame = recorder.GetCurrentFrame();
-                if (frame == null)
-                {
-                    soapboxStateIndicator.SetActive(false);
-                }
-                else
-                {
-                    SetIndicator(frame);
-                }
-            }
-
-            //Clear key
-            if(Input.GetKeyDown((KeyCode) clearKey.BoxedValue))
-            {
-                recorder.Clear();
-                PlayerManager.Instance.messenger.Log("Clear Recorder", 1f);
-            }
-        }
-
-        private void TestModeUpdate()
-        {
-            if (record)
-            {
-                SetupCar sc = PlayerManager.Instance.currentMaster.carSetups[0];
-                if (sc.reseter.finished)
-                {
-                    record = false;
-                    return;
-                }
-
-                float addedTime = selectedFrame != null ? selectedFrame.time : 0;
-
-                SoapboxRecorderFrame lastFrame = recorder.GetLastFrame();
-                if(lastFrame != null)
-                {
-                    if(PlayerManager.Instance.currentMaster.currentLevelPhysicsTime + addedTime == lastFrame.time)
-                    {
+                        record = false;
                         return;
                     }
+
+                    float addedTime = selectedFrame != null ? selectedFrame.time : 0;
+
+                    SoapboxRecorderFrame lastFrame = recorder.GetLastFrame();
+                    if (lastFrame != null)
+                    {
+                        if (PlayerManager.Instance.currentMaster.currentLevelPhysicsTime + addedTime == lastFrame.time)
+                        {
+                            return;
+                        }
+                    }
+
+                    SoapboxRecorderFrame newFrame = new SoapboxRecorderFrame()
+                    {
+                        position = sc.transform.position,
+                        rotation = sc.transform.rotation,
+                        velocity = sc.cc.GetRB().velocity,
+                        angularVelocity = sc.cc.GetRB().angularVelocity,
+                        time = PlayerManager.Instance.currentMaster.currentLevelPhysicsTime + addedTime,
+                        isCheckpoint = checkpointFlag
+                    };
+
+                    checkpointFlag = false;
+
+                    recorder.AddFrame(newFrame);
                 }
-
-                SoapboxRecorderFrame newFrame = new SoapboxRecorderFrame()
-                {
-                    position = sc.transform.position,
-                    rotation = sc.transform.rotation,
-                    velocity = sc.cc.GetRB().velocity,
-                    angularVelocity = sc.cc.GetRB().angularVelocity,
-                    time = PlayerManager.Instance.currentMaster.currentLevelPhysicsTime + addedTime
-                };
-
-                recorder.AddFrame(newFrame);
             }
         }
 
         private void SetIndicator(SoapboxRecorderFrame frame)
         {
-            soapboxStateIndicator.transform.position = frame.position;
-            soapboxStateIndicator.transform.rotation = frame.rotation;
-            PlayerManager.Instance.messenger.Log("Current Time: " + frame.time, 1f);
-        }      
+            soapboxVisualizer.transform.position = frame.position;
+            soapboxVisualizer.transform.rotation = frame.rotation;
+        }
+
+        private void OnGUI()
+        {
+            if (gameState == GameState.Editor && recorder.frames.Count > 0)
+            {
+                if (GUI.Button(new Rect(10, Screen.height * 0.15f + 10, 30, 30), "<C"))
+                {
+                    recorder.PreviousCheckpointFrame();
+                    sliderValue = recorder.GetCurrentFrame().time;
+                }
+
+                if (GUI.Button(new Rect(50, Screen.height * 0.15f + 10, 30, 30), "<"))
+                {
+                    recorder.PreviousFrame();
+                    sliderValue = recorder.GetCurrentFrame().time;
+                }
+
+                float newSliderValue = GUI.HorizontalSlider(new Rect(90, Screen.height * 0.15f + 10, Screen.width * 0.375f, 30), sliderValue, minTime, maxTime);
+                GUI.Label(new Rect(100 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 100, 30), "Time: " + newSliderValue.ToString("F2"));
+
+                if (GUI.Button(new Rect(210 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 30, 30), ">"))
+                {
+                    recorder.NextFrame();
+                    sliderValue = recorder.GetCurrentFrame().time;
+                }
+
+                if (GUI.Button(new Rect(250 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 30, 30), "C>"))
+                {
+                    recorder.NextCheckpointFrame();
+                    sliderValue = recorder.GetCurrentFrame().time;
+                }
+
+                if (Mathf.Abs(newSliderValue - previousSliderValue) > Mathf.Epsilon)
+                {
+                    sliderValue = newSliderValue;
+                    int frameIndex = recorder.GetFrameIndexByTime(sliderValue);
+                    if (frameIndex != -1)
+                    {
+                        recorder.SetCurrentFrameIndex(frameIndex);
+                        SoapboxRecorderFrame frame = recorder.GetCurrentFrame();
+                        if (frame != null)
+                        {
+                            SetIndicator(frame);
+                        }
+                    }
+                    previousSliderValue = newSliderValue;
+                }
+            }
+        }
 
         public void SpawnPlayer(GameMaster gameMaster, SoapboxRecorderFrame frame)
         {
@@ -406,22 +226,20 @@ namespace PracticeMode
             gameMaster.carSetups[0].cc.GetRB().velocity = frame.velocity;
             gameMaster.carSetups[0].cc.GetRB().angularVelocity = frame.angularVelocity;
         }
-    }    
+    }
 
     [HarmonyPatch(typeof(GameMaster), "SpawnPlayers")]
     public class SetupGameSpawnPlayers
     {
         public static bool Prefix(GameMaster __instance)
         {
-            //Spawn normally if not in test mode.
-            if(Plugin.Instance.gameState == Plugin.GameState.Other)
+            if (Plugin.Instance.gameState == Plugin.GameState.Other)
             {
                 return true;
             }
 
-            //If a frame is selected / available, make sure to remove all the next frames and then set the player at the right position.
             SoapboxRecorderFrame frame = Plugin.Instance.recorder.GetCurrentFrame();
-            if(frame != null)
+            if (frame != null)
             {
                 Plugin.Instance.recorder.RemoveFramesAfterCurrent();
                 Plugin.Instance.SpawnPlayer(__instance, frame);
@@ -446,31 +264,30 @@ namespace PracticeMode
                 return;
             }
 
-            if(Plugin.Instance.selectedFrame != null)
+            if (Plugin.Instance.selectedFrame != null)
             {
                 Plugin.Instance.SetPlayerVelocitiesOnRelease(__instance, Plugin.Instance.selectedFrame);
-            }          
+            }
 
             Plugin.Instance.record = true;
         }
     }
 
-
     [HarmonyPatch(typeof(MainMenuUI), "Awake")]
     public static class MainMenuUIAwake
     {
-        public static void Postfix()
+        public static void Postfix(MainMenuUI __instance)
         {
             Plugin.Instance.SetGameState(Plugin.GameState.Other);
             Plugin.Instance.recorder.RewindToStart();
-            if (Plugin.Instance.soapboxStateIndicator != null) { return; }
+            if (Plugin.Instance.soapboxVisualizer != null) { return; }
 
             NetworkedGhostSpawner networkedGhostSpawner = GameObject.FindObjectOfType<NetworkedGhostSpawner>();
             NetworkedZeepkistGhost networkedZeepkistGhost = networkedGhostSpawner.zeepkistGhostPrefab;
             Transform soapboxOriginal = networkedZeepkistGhost.ghostModel.transform;
-            Plugin.Instance.soapboxStateIndicator = GameObject.Instantiate(soapboxOriginal.gameObject);
-            GameObject.DontDestroyOnLoad(Plugin.Instance.soapboxStateIndicator);
-            Plugin.Instance.soapboxStateIndicator.SetActive(false);
+            Plugin.Instance.soapboxVisualizer = GameObject.Instantiate(soapboxOriginal.gameObject);
+            GameObject.DontDestroyOnLoad(Plugin.Instance.soapboxVisualizer);
+            Plugin.Instance.soapboxVisualizer.SetActive(false);
         }
     }
 
