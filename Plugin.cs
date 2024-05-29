@@ -14,7 +14,7 @@ namespace PracticeMode
     {
         public const string pluginGUID = "com.metalted.zeepkist.practicemode";
         public const string pluginName = "Practice Mode";
-        public const string pluginVersion = "1.2";
+        public const string pluginVersion = "1.3";
 
         public static Plugin Instance;
         public SoapboxRecorder recorder = new SoapboxRecorder();
@@ -184,6 +184,13 @@ namespace PracticeMode
                 {
                     recorder.NextCheckpointFrame();
                     sliderValue = recorder.GetCurrentFrame().time;
+                }
+
+                if(GUI.Button(new Rect(290 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 60, 30), "Reset"))
+                {
+                    recorder.Clear(); 
+                    soapboxVisualizer.SetActive(false);
+                    sliderValue = 0;
                 }
 
                 if (Mathf.Abs(newSliderValue - previousSliderValue) > Mathf.Epsilon)
