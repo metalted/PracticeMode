@@ -14,7 +14,7 @@ namespace PracticeMode
     {
         public const string pluginGUID = "com.metalted.zeepkist.practicemode";
         public const string pluginName = "Practice Mode";
-        public const string pluginVersion = "1.3";
+        public const string pluginVersion = "1.4";
 
         public static Plugin Instance;
         public SoapboxRecorder recorder = new SoapboxRecorder();
@@ -39,6 +39,8 @@ namespace PracticeMode
         public enum GameState { Other, Editor, TestMode };
         public GameState gameState = GameState.Other;
 
+        public RectTransform pmWindow;
+
         private void Awake()
         {
             Harmony harmony = new Harmony(pluginGUID);
@@ -50,7 +52,10 @@ namespace PracticeMode
             Instance = this;
 
             LevelEditorApi.EnteredTestMode += () => { SetGameState(GameState.TestMode); };
-            LevelEditorApi.EnteredLevelEditor += () => { SetGameState(GameState.Editor); };
+            LevelEditorApi.EnteredLevelEditor += () => 
+            { 
+                SetGameState(GameState.Editor); 
+            };
             LevelEditorApi.LevelLoaded += () => { recorder.Clear(); soapboxVisualizer.SetActive(false); };
 
             RacingApi.PassedCheckpoint += (time) => { if (record) { checkpointFlag = true; } else { checkpointFlag = false; } };
@@ -115,6 +120,7 @@ namespace PracticeMode
                 if (record)
                 {
                     SetupCar sc = PlayerManager.Instance.currentMaster.carSetups[0];
+
                     if (sc.reseter.finished)
                     {
                         record = false;
@@ -159,40 +165,93 @@ namespace PracticeMode
         {
             if (gameState == GameState.Editor && recorder.frames.Count > 0)
             {
-                if (GUI.Button(new Rect(10, Screen.height * 0.15f + 10, 30, 30), "<C"))
-                {
-                    recorder.PreviousCheckpointFrame();
-                    sliderValue = recorder.GetCurrentFrame().time;
-                }
+                // Calculate the actual Rect in screen space
+                Vector2 screenMin = RectTransformUtility.WorldToScreenPoint(null, pmWindow.TransformPoint(pmWindow.rect.min));
+                Vector2 screenMax = RectTransformUtility.WorldToScreenPoint(null, pmWindow.TransformPoint(pmWindow.rect.max));
 
-                if (GUI.Button(new Rect(50, Screen.height * 0.15f + 10, 30, 30), "<"))
+                // Convert screen space to GUI space
+                float guiYMin = Screen.height - screenMax.y;
+                float guiYMax = Screen.height - screenMin.y;
+                Rect pmWindowRect = new Rect(screenMin.x, guiYMin, screenMax.x - screenMin.x, guiYMax - guiYMin);
+
+                // Draw the main box with title
+                GUI.Box(pmWindowRect, "Practice Mode");
+
+                // Calculate positions within the box relative to its RectTransform
+                float buttonWidth = 60f;
+                float buttonHeight = 25f;
+                float sliderHeight = 20f;
+                float padding = 5f;
+
+                // Calculate the available width for the buttons and the label
+                float totalButtonWidth = 5 * (buttonWidth + padding);
+                float availableLabelWidth = pmWindowRect.width - totalButtonWidth - 2 * padding;
+
+                // Starting x and y positions for elements within the box
+                float startX = pmWindowRect.x + padding;
+                float startY = pmWindowRect.y + padding + buttonHeight; // Move down for title
+
+                // Title position (spanning full width)
+                Rect titleRect = new Rect(pmWindowRect.x, pmWindowRect.y, pmWindowRect.width, buttonHeight);
+                GUI.Label(titleRect, "Practice Mode", GUI.skin.box);
+
+                // Move down to the next row
+                startY += buttonHeight + padding;
+
+                // Row elements positioning
+                // Previous frame button <
+                Rect previousFrameRect = new Rect(startX, startY, buttonWidth, buttonHeight);
+                if (GUI.Button(previousFrameRect, "<"))
                 {
                     recorder.PreviousFrame();
                     sliderValue = recorder.GetCurrentFrame().time;
                 }
 
-                float newSliderValue = GUI.HorizontalSlider(new Rect(90, Screen.height * 0.15f + 10, Screen.width * 0.375f, 30), sliderValue, minTime, maxTime);
-                GUI.Label(new Rect(100 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 100, 30), "Time: " + newSliderValue.ToString("F2"));
-
-                if (GUI.Button(new Rect(210 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 30, 30), ">"))
+                // Previous checkpoint button <C
+                Rect previousCheckpointRect = new Rect(previousFrameRect.x + buttonWidth + padding, startY, buttonWidth, buttonHeight);
+                if (GUI.Button(previousCheckpointRect, "<C"))
                 {
-                    recorder.NextFrame();
+                    recorder.PreviousCheckpointFrame();
                     sliderValue = recorder.GetCurrentFrame().time;
                 }
 
-                if (GUI.Button(new Rect(250 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 30, 30), "C>"))
+                // Time label
+                Rect timeLabelRect = new Rect(previousCheckpointRect.x + buttonWidth + padding, startY, availableLabelWidth, buttonHeight);
+                GUI.Label(timeLabelRect, "Time: " + sliderValue.ToString("F2"));
+
+                // Next checkpoint button C>
+                Rect nextCheckpointRect = new Rect(timeLabelRect.x + availableLabelWidth + padding, startY, buttonWidth, buttonHeight);
+                if (GUI.Button(nextCheckpointRect, "C>"))
                 {
                     recorder.NextCheckpointFrame();
                     sliderValue = recorder.GetCurrentFrame().time;
                 }
 
-                if(GUI.Button(new Rect(290 + Screen.width * 0.375f, Screen.height * 0.15f + 10, 60, 30), "Reset"))
+                // Next frame button >
+                Rect nextFrameRect = new Rect(nextCheckpointRect.x + buttonWidth + padding, startY, buttonWidth, buttonHeight);
+                if (GUI.Button(nextFrameRect, ">"))
                 {
-                    recorder.Clear(); 
+                    recorder.NextFrame();
+                    sliderValue = recorder.GetCurrentFrame().time;
+                }
+
+                // Reset button to clear the recording
+                Rect resetButtonRect = new Rect(nextFrameRect.x + buttonWidth + padding, startY, buttonWidth, buttonHeight);
+                if (GUI.Button(resetButtonRect, "Reset"))
+                {
+                    recorder.Clear();
                     soapboxVisualizer.SetActive(false);
                     sliderValue = 0;
                 }
 
+                // Move down to the next row
+                startY += buttonHeight + padding;
+
+                // Slider for selecting the frame (spanning full width)
+                Rect sliderRect = new Rect(pmWindowRect.x + padding, startY, pmWindowRect.width - 2 * padding, sliderHeight);
+                float newSliderValue = GUI.HorizontalSlider(sliderRect, sliderValue, minTime, maxTime);
+
+                // Update the frame based on the slider value if changed
                 if (Mathf.Abs(newSliderValue - previousSliderValue) > Mathf.Epsilon)
                 {
                     sliderValue = newSliderValue;
@@ -210,6 +269,7 @@ namespace PracticeMode
                 }
             }
         }
+
 
         public void SpawnPlayer(GameMaster gameMaster, SoapboxRecorderFrame frame)
         {
@@ -261,6 +321,20 @@ namespace PracticeMode
         }
     }
 
+    [HarmonyPatch(typeof(GameMaster), "RestartLevel")]
+    public class GameMasterRestartLevel
+    {
+        public static void Prefix()
+        {
+            if (Plugin.Instance.gameState == Plugin.GameState.Other)
+            {
+                return;
+            }
+
+            Plugin.Instance.record = false;
+        }
+    }
+
     [HarmonyPatch(typeof(GameMaster), "ReleaseTheZeepkists")]
     public static class SetupGameReleaseTheZeepkistsPatch
     {
@@ -292,7 +366,23 @@ namespace PracticeMode
             NetworkedGhostSpawner networkedGhostSpawner = GameObject.FindObjectOfType<NetworkedGhostSpawner>();
             NetworkedZeepkistGhost networkedZeepkistGhost = networkedGhostSpawner.zeepkistGhostPrefab;
             Transform soapboxOriginal = networkedZeepkistGhost.ghostModel.transform;
+
+            
+
             Plugin.Instance.soapboxVisualizer = GameObject.Instantiate(soapboxOriginal.gameObject);
+
+            Transform glider = Plugin.Instance.soapboxVisualizer.transform.Find("Glider");
+            if(glider != null)
+            {
+                glider.transform.gameObject.SetActive(false);
+            }
+
+            Transform visibleHorn = Plugin.Instance.soapboxVisualizer.transform.Find("Visible Horn");
+            if(visibleHorn != null)
+            {
+                visibleHorn.transform.gameObject.SetActive(false);
+            }
+
             GameObject.DontDestroyOnLoad(Plugin.Instance.soapboxVisualizer);
             Plugin.Instance.soapboxVisualizer.SetActive(false);
         }
@@ -304,6 +394,38 @@ namespace PracticeMode
         public static void Postfix()
         {
             Plugin.Instance.recorder.RewindToStart();
+        }
+    }
+
+    [HarmonyPatch(typeof(LEV_LevelEditorCentral), "Awake")]
+    public class LEV_CentralAwakePatch
+    {
+        public static void Postfix(LEV_LevelEditorCentral __instance)
+        {
+            // Find the Canvas in the hierarchy of LEV_LevelEditorCentral
+            RectTransform canvasRectTransform = __instance.transform.Find("Canvas").GetComponent<RectTransform>();
+
+            // Create a new GameObject that will act as the window you want to position
+            GameObject newWindow = new GameObject("PMWindow", typeof(RectTransform));
+
+            // Set the new GameObject's parent to be the canvas
+            newWindow.transform.SetParent(canvasRectTransform, false);
+            newWindow.transform.SetAsFirstSibling();
+
+            // Get the RectTransform component of the new GameObject
+            RectTransform pmWindowRectTransform = newWindow.GetComponent<RectTransform>();
+
+            // Optionally, set the RectTransform's properties to desired values
+            pmWindowRectTransform.anchorMin = new Vector2(0.5f, 0.5f); // Center anchor
+            pmWindowRectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            pmWindowRectTransform.pivot = new Vector2(0.5f, 0.5f);
+            pmWindowRectTransform.anchoredPosition = Vector2.zero; // Center position
+            pmWindowRectTransform.sizeDelta = new Vector2(200, 100); // Width and height
+
+            // Save the RectTransform to Plugin.Instance.pmWindow
+            Plugin.Instance.pmWindow = pmWindowRectTransform;
+
+            ZeepSDK.UI.UIApi.AddToConfigurator(Plugin.Instance.pmWindow);
         }
     }
 }
