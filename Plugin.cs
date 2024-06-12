@@ -360,14 +360,13 @@ namespace PracticeMode
         public static void Postfix(MainMenuUI __instance)
         {
             Plugin.Instance.SetGameState(Plugin.GameState.Other);
-            Plugin.Instance.recorder.RewindToStart();
+            Plugin.Instance.recorder.Clear();
+
             if (Plugin.Instance.soapboxVisualizer != null) { return; }
 
             NetworkedGhostSpawner networkedGhostSpawner = GameObject.FindObjectOfType<NetworkedGhostSpawner>();
             NetworkedZeepkistGhost networkedZeepkistGhost = networkedGhostSpawner.zeepkistGhostPrefab;
-            Transform soapboxOriginal = networkedZeepkistGhost.ghostModel.transform;
-
-            
+            Transform soapboxOriginal = networkedZeepkistGhost.ghostModel.transform;            
 
             Plugin.Instance.soapboxVisualizer = GameObject.Instantiate(soapboxOriginal.gameObject);
 

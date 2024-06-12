@@ -21,8 +21,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Reference Include="ZeepSDK">
-	    <HintPath>C:\Users\Ted\Desktop\V16Compatible\ZeepSDK.dll</HintPath>
-	  </Reference>
+	  <PackageReference Include="ZeepSDK" Version="1.30.2" />
 	</ItemGroup>
 </Project>
