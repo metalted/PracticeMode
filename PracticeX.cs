@@ -35,6 +35,9 @@ namespace PracticeMode
         //Mouse in rect
         private static bool mouseInRect;
         private static object mLock = new object();
+        private static bool blockingMouse = false;
+
+        private static LEV_LevelEditorCentral central;
 
         public static void Initialize()
         {
@@ -149,24 +152,6 @@ namespace PracticeMode
             HideVisualizer();
         }
 
-        private static void CreateVisualizer2()
-        {
-            if(mSoapboxVisualizer != null)
-            {
-                return;
-            }
-
-            NetworkedGhostSpawner networkedGhostSpawner = GameObject.FindObjectOfType<NetworkedGhostSpawner>();
-            NetworkedZeepkistGhost networkedZeepkistGhost = networkedGhostSpawner.zeepkistGhostPrefab;
-            Transform soapboxOriginal = networkedZeepkistGhost.ghostModel.transform;
-
-            mSoapboxVisualizer = GameObject.Instantiate(soapboxOriginal.gameObject);
-            mSoapboxVisualizer.transform.Find("Glider")?.gameObject.SetActive(false);
-            mSoapboxVisualizer.transform.Find("Visible Horn")?.gameObject.SetActive(false);       
-            GameObject.DontDestroyOnLoad(mSoapboxVisualizer);
-            HideVisualizer();
-        }
-
         public static PlayerData GetLocalPlayerData()
         {
             PlayerData playerData = new PlayerData();
@@ -274,6 +259,7 @@ namespace PracticeMode
                 case Scene.Editor:
 
                     Plugin.Instance.Log("SetCurrentScene: Editor");
+
                     //No need for recording in the editor.
                     mRecord = false;
 
@@ -331,6 +317,7 @@ namespace PracticeMode
 
         public static void OnLevelEditor(LEV_LevelEditorCentral instance)
         {
+            central = instance;
             // Find the Canvas in the hierarchy of LEV_LevelEditorCentral
             RectTransform canvasRectTransform = instance.transform.Find("Canvas").GetComponent<RectTransform>();
 
@@ -373,6 +360,21 @@ namespace PracticeMode
 
             if(mRecorder.frames.Count <= 0)
             {
+                if(blockingMouse)
+                {
+                    mouseInRect = false;
+                    DoMouseBlock(false);
+                }
+                return;
+            }
+
+            if(central.tool.currentTool != 0)
+            {
+                if (blockingMouse)
+                {
+                    mouseInRect = false;
+                    DoMouseBlock(false);
+                }
                 return;
             }
 
@@ -484,6 +486,8 @@ namespace PracticeMode
 
         public static void DoMouseBlock(bool state)
         {
+            blockingMouse = state;
+
             if (state)
             {
                 LevelEditorApi.BlockMouseInput(mLock);
@@ -496,7 +500,7 @@ namespace PracticeMode
 
         public static void DoUpdate()
         {
-            if(mCurrentScene == Scene.Editor)
+            if(mCurrentScene == Scene.Editor && central.tool.currentTool == 0)
             {
                 if (mPmWindowRect.Contains(Event.current.mousePosition))
                 {
@@ -555,7 +559,10 @@ namespace PracticeMode
                     velocity = sc.cc.GetRB().velocity,
                     angularVelocity = sc.cc.GetRB().angularVelocity,
                     time = PlayerManager.Instance.currentMaster.currentLevelPhysicsTime + addedTime,
-                    isCheckpoint = mCheckpointFlag
+                    isCheckpoint = mCheckpointFlag,
+                    zeepkistState = sc.cc.currentZeepkistState,
+                    invertedSteering = sc.cc.invertSteering,
+                    invertedBraking = sc.cc.invertBraking
                 };
 
                 //Reset the checkpoint flag for next frame.
@@ -664,6 +671,16 @@ namespace PracticeMode
             gameMaster.carSetups.Add(setupCar);
             setupCar.cc.GetRB().collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             setupCar.cc.GetRB().isKinematic = true;
+            
+            if(frame.invertedBraking)
+            {
+                setupCar.cameraSwitcher.InvertBraking();
+            }
+
+            if(frame.invertedSteering)
+            {
+                setupCar.cameraSwitcher.InvertSteering();
+            }
 
             Plugin.Instance.Log("SpawnPlayer: Using frame data.");
         }
@@ -672,6 +689,7 @@ namespace PracticeMode
         {
             gameMaster.carSetups[0].cc.GetRB().velocity = frame.velocity;
             gameMaster.carSetups[0].cc.GetRB().angularVelocity = frame.angularVelocity;
+            gameMaster.carSetups[0].cc.SetZeepkistState(frame.zeepkistState, "PracticeX", false);
 
             Plugin.Instance.Log("SetPlayerVelocitiesOnRelease: Using frame data.");
         }

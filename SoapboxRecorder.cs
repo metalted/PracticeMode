@@ -12,6 +12,9 @@ namespace PracticeMode
         public Vector3 angularVelocity;
         public float time;
         public bool isCheckpoint;
+        public byte zeepkistState;
+        public bool invertedSteering;
+        public bool invertedBraking;
     }
 
     public class SoapboxRecorder

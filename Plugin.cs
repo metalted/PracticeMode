@@ -10,7 +10,7 @@ namespace PracticeMode
     {
         public const string pluginGUID = "com.metalted.zeepkist.practicemode";
         public const string pluginName = "Practice Mode";
-        public const string pluginVersion = "1.5";
+        public const string pluginVersion = "1.6";
         public static Plugin Instance;
 
         public ConfigEntry<KeyCode> enableModKey;
